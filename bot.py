@@ -59,5 +59,4 @@ def start(message):
 if __name__ == "__main__":
     init_db()
     keep_alive()
-    print("বট স্টার্ট হচ্ছে...")
-    bot.infinity_polling()
+    print("বট
