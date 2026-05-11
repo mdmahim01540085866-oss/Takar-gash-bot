@@ -1,4 +1,4 @@
-    import telebot
+import telebot
 import sqlite3
 from flask import Flask
 from threading import Thread
@@ -27,7 +27,6 @@ def get_db():
 def init_db():
     conn = get_db()
     cursor = conn.cursor()
-    # joined কলাম দিয়ে নিশ্চিত করা হবে সে কি নতুন নাকি পুরনো
     cursor.execute('''CREATE TABLE IF NOT EXISTS users 
                       (user_id INTEGER PRIMARY KEY, balance INTEGER DEFAULT 0, referred_by INTEGER, joined INTEGER DEFAULT 0)''')
     conn.commit()
@@ -55,10 +54,7 @@ def start(message):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
-    user_data = cursor.fetchone()
-    
-    if not user_data:
-        # নতুন ইউজার হলে ডাটাবেসে তার রেফারার আইডি সহ সেভ হবে
+    if not cursor.fetchone():
         cursor.execute("INSERT INTO users (user_id, balance, referred_by, joined) VALUES (?, 0, ?, 0)", (user_id, ref_id))
         conn.commit()
     conn.close()
@@ -67,7 +63,7 @@ def start(message):
         m = telebot.types.InlineKeyboardMarkup()
         m.add(telebot.types.InlineKeyboardButton("চ্যানেলে জয়েন করুন 📢", url=CHANNEL_LINK))
         m.add(telebot.types.InlineKeyboardButton("ভেরিফাই করুন ✅", callback_data="verify"))
-        bot.send_message(user_id, "মামা, আগে জয়েন করে ভেরিফাই কর! নাহলে রেফার বোনাস পাবা না।", reply_markup=m)
+        bot.send_message(user_id, "মামা, আগে জয়েন করে ভেরিফাই কর!", reply_markup=m)
     else:
         bot.send_message(user_id, "স্বাগতম মামা! মেনু ব্যবহার কর।", reply_markup=main_menu())
 
@@ -79,25 +75,18 @@ def verify(call):
         cursor = conn.cursor()
         cursor.execute("SELECT referred_by, joined FROM users WHERE user_id=?", (user_id,))
         res = cursor.fetchone()
-        
-        # যদি ইউজার এখনো ভেরিফাই না করে থাকে (joined = 0)
         if res and res[1] == 0:
             rid = res[0]
             if rid and int(rid) != user_id:
-                # যে রেফার করেছে তার ব্যালেন্সে ১০ টাকা যোগ হবে
                 cursor.execute("UPDATE users SET balance = balance + 10 WHERE user_id=?", (rid,))
                 conn.commit()
-                try: 
-                    bot.send_message(rid, "🎉 মামা! তোমার রেফার লিংকে একজন সফলভাবে জয়েন করেছে। ১০ টাকা বোনাস পেয়েছো!")
+                try: bot.send_message(rid, "🎉 মামা! ১ জন জয়েন করেছে। ১০ টাকা বোনাস পেয়েছো!")
                 except: pass
-            
-            # এই ইউজারের জয়েন স্ট্যাটাস ১ করে দেওয়া হলো যাতে বারবার বোনাস না যায়
             cursor.execute("UPDATE users SET joined = 1 WHERE user_id=?", (user_id,))
             conn.commit()
-        
         conn.close()
         bot.delete_message(user_id, call.message.message_id)
-        bot.send_message(user_id, "ভেরিফিকেশন সফল! মেনু ব্যবহার করো।", reply_markup=main_menu())
+        bot.send_message(user_id, "ভেরিফিকেশন সফল মামা!", reply_markup=main_menu())
     else:
         bot.answer_callback_query(call.id, "আগে জয়েন তো কর মামা!", show_alert=True)
 
@@ -116,7 +105,7 @@ def handle_text(message):
         bot.send_message(user_id, f"তোর বর্তমান ব্যালেন্স: {balance} টাকা।")
     elif message.text == "👥 রেফার":
         bot_user = bot.get_me().username
-        bot.send_message(user_id, f"প্রতি রেফারে ১০ টাকা! তোর লিংক:\nhttps://t.me/{bot_user}?start={user_id}")
+        bot.send_message(user_id, f"লিংক:\nhttps://t.me/{bot_user}?start={user_id}")
     elif message.text == "📊 স্ট্যাটিস্টিক্স":
         cursor.execute("SELECT COUNT(*) FROM users")
         total = cursor.fetchone()[0]
@@ -125,12 +114,17 @@ def handle_text(message):
         if balance < 1000:
             bot.send_message(user_id, "আগে ১০০০ পুরা করো মামা! তোমার ব্যালেন্সে পর্যাপ্ত টাকা নাই।")
         else:
-            bot.send_message(user_id, "মামা, ১০০০ টাকা হয়ে গেছে! এখন তোমার বিকাশ বা নগদ নাম্বারটা লিখে দাও।")
-            bot.send_message(ADMIN_ID, f"🔔 উইথড্র রিকোয়েস্ট!\nআইডি: {user_id}\nব্যালেন্স: {balance}")
+            msg = bot.send_message(user_id, "মামা, ১০০০ টাকা হয়ে গেছে! এখন তোমার বিকাশ বা নগদ নাম্বারটা লিখে দাও।", reply_markup=telebot.types.ForceReply())
+            bot.register_next_step_handler(msg, process_withdraw)
     conn.close()
+
+def process_withdraw(message):
+    user_id = message.chat.id
+    number = message.text
+    bot.send_message(user_id, f"মামা, তোমার নাম্বার ({number}) সেভ করা হয়েছে। এডমিন চেক করে পেমেন্ট করে দিবে।")
+    bot.send_message(ADMIN_ID, f"📢 উইথড্র রিকোয়েস্ট!\nআইডি: {user_id}\nনাম্বার: {number}")
 
 if __name__ == "__main__":
     init_db()
     Thread(target=run_flask).start()
-    print("বট একদম রেডি মামা!")
     bot.infinity_polling()
