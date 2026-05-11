@@ -8,9 +8,10 @@ import os
 TOKEN = '8723569797:AAHn_66bEU7fBZwN2G-mUVgJUrIzsT2ZftY'
 CHANNEL_ID = '-1003351496871' 
 CHANNEL_LINK = 'https://t.me/+fWQHyEKJepA2Njll'
+ADMIN_ID = 6871732560 
 
-bot = telebot.TeleBot(TOKEN, threaded=True)
-app = Flask(__name__) # ঠিক করা হয়েছে
+bot = telebot.TeleBot(TOKEN, threaded=False)
+app = Flask('')
 
 @app.route('/')
 def home():
@@ -20,10 +21,13 @@ def run_flask():
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
 
-# --- ডাটাবেস ফাংশন ---
+def get_db():
+    return sqlite3.connect('refer_data.db', check_same_thread=False)
+
 def init_db():
-    conn = sqlite3.connect('refer_data.db')
+    conn = get_db()
     cursor = conn.cursor()
+    # joined কলাম দিয়ে নিশ্চিত করা হবে সে কি নতুন নাকি পুরনো
     cursor.execute('''CREATE TABLE IF NOT EXISTS users 
                       (user_id INTEGER PRIMARY KEY, balance INTEGER DEFAULT 0, referred_by INTEGER, joined INTEGER DEFAULT 0)''')
     conn.commit()
@@ -33,102 +37,100 @@ def is_joined(user_id):
     try:
         status = bot.get_chat_member(CHANNEL_ID, user_id).status
         return status in ['member', 'administrator', 'creator']
-    except:
-        return False
+    except: return False
 
-# --- কিবোর্ড মেনু ---
 def main_menu():
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row("💰 ব্যালেন্স", "👥 রেফার")
     markup.row("💳 উইথড্র", "📊 স্ট্যাটিস্টিক্স")
     return markup
 
-# --- স্টার্ট কমান্ড ---
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.chat.id
     init_db()
-    
     args = message.text.split()
-    refer_id = args[1] if len(args) > 1 else None
-
-    conn = sqlite3.connect('refer_data.db')
+    ref_id = args[1] if len(args) > 1 else None
+    
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
-    user = cursor.fetchone()
-
-    if not user:
-        cursor.execute("INSERT INTO users (user_id, balance, referred_by, joined) VALUES (?, 0, ?, 0)", (user_id, refer_id))
+    user_data = cursor.fetchone()
+    
+    if not user_data:
+        # নতুন ইউজার হলে ডাটাবেসে তার রেফারার আইডি সহ সেভ হবে
+        cursor.execute("INSERT INTO users (user_id, balance, referred_by, joined) VALUES (?, 0, ?, 0)", (user_id, ref_id))
         conn.commit()
     conn.close()
 
     if not is_joined(user_id):
-        markup = telebot.ypes.InlineKeyboardMarkup()
-        markup.add(telebot.types.InlineKeyboardButton("চ্যানেলে জয়েন করুন 📢", url=CHANNEL_LINK))
-        markup.add(telebot.types.InlineKeyboardButton("ভেরিফাই করুন ✅", callback_data="verify"))
-        bot.send_message(user_id, "মামা, পেমেন্ট পেতে আগে চ্যানেলে জয়েন করে ভেরিফাই বাটনে ক্লিক কর!", reply_markup=markup)
+        m = telebot.types.InlineKeyboardMarkup()
+        m.add(telebot.types.InlineKeyboardButton("চ্যানেলে জয়েন করুন 📢", url=CHANNEL_LINK))
+        m.add(telebot.types.InlineKeyboardButton("ভেরিফাই করুন ✅", callback_data="verify"))
+        bot.send_message(user_id, "মামা, আগে জয়েন করে ভেরিফাই কর! নাহলে রেফার বোনাস পাবা না।", reply_markup=m)
     else:
-        bot.send_message(user_id, "স্বাগতম মামা! মেনু ব্যবহার করুন।", reply_markup=main_menu())
+        bot.send_message(user_id, "স্বাগতম মামা! মেনু ব্যবহার কর।", reply_markup=main_menu())
 
-# --- ভেরিফাই হ্যান্ডলার ---
 @bot.callback_query_handler(func=lambda call: call.data == "verify")
 def verify(call):
     user_id = call.from_user.id
     if is_joined(user_id):
-        conn = sqlite3.connect('refer_data.db')
+        conn = get_db()
         cursor = conn.cursor()
         cursor.execute("SELECT referred_by, joined FROM users WHERE user_id=?", (user_id,))
         res = cursor.fetchone()
         
+        # যদি ইউজার এখনো ভেরিফাই না করে থাকে (joined = 0)
         if res and res[1] == 0:
-            ref_id = res[0]
-            if ref_id and int(ref_id) != user_id:
-                cursor.execute("UPDATE users SET balance = balance + 10 WHERE user_id=?", (ref_id,))
-                try:
-                    bot.send_message(ref_id, "🎉 নতুন রেফার! ১০ টাকা যোগ হয়েছে।")
+            rid = res[0]
+            if rid and int(rid) != user_id:
+                # যে রেফার করেছে তার ব্যালেন্সে ১০ টাকা যোগ হবে
+                cursor.execute("UPDATE users SET balance = balance + 10 WHERE user_id=?", (rid,))
+                conn.commit()
+                try: 
+                    bot.send_message(rid, "🎉 মামা! তোমার রেফার লিংকে একজন সফলভাবে জয়েন করেছে। ১০ টাকা বোনাস পেয়েছো!")
                 except: pass
             
+            # এই ইউজারের জয়েন স্ট্যাটাস ১ করে দেওয়া হলো যাতে বারবার বোনাস না যায়
             cursor.execute("UPDATE users SET joined = 1 WHERE user_id=?", (user_id,))
             conn.commit()
+        
         conn.close()
-        bot.answer_callback_query(call.id, "ভেরিফাই সফল হয়েছে!")
-        bot.send_message(user_id, "সফলভাবে ভেরিফাই হয়েছে!", reply_markup=main_menu())
+        bot.delete_message(user_id, call.message.message_id)
+        bot.send_message(user_id, "ভেরিফিকেশন সফল! মেনু ব্যবহার করো।", reply_markup=main_menu())
     else:
-        bot.answer_callback_query(call.id, "আগে চ্যানেলে জয়েন করুন!", show_alert=True)
+        bot.answer_callback_query(call.id, "আগে জয়েন তো কর মামা!", show_alert=True)
 
-# --- বাটন হ্যান্ডলার (নতুন যোগ করা হয়েছে) ---
-@bot.message_handler(func=lambda message: True)
-def handle_buttons(message):
+@bot.message_handler(func=lambda m: True)
+def handle_text(message):
     user_id = message.chat.id
-    conn = sqlite3.connect('refer_data.db')
+    if not is_joined(user_id): return start(message)
+
+    conn = get_db()
     cursor = conn.cursor()
+    cursor.execute("SELECT balance FROM users WHERE user_id=?", (user_id,))
+    res = cursor.fetchone()
+    balance = res[0] if res else 0
 
     if message.text == "💰 ব্যালেন্স":
-        cursor.execute("SELECT balance FROM users WHERE user_id=?", (user_id,))
-        res = cursor.fetchone()
-        balance = res[0] if res else 0
-        bot.reply_to(message, f"আপনার বর্তমান ব্যালেন্স: {balance} টাকা")
-
+        bot.send_message(user_id, f"তোর বর্তমান ব্যালেন্স: {balance} টাকা।")
     elif message.text == "👥 রেফার":
-        ref_link = f"https://t.me/{(bot.get_me().username)}?start={user_id}"
-        bot.reply_to(message, f"আপনার রেফার লিংক:\n{ref_link}\n\nপ্রতি রেফার ১৫ টাকা!")
-
-    elif message.text == "💳 উইথড্র":
-        bot.reply_to(message, "উইথড্র অপশন শীঘ্রই আসছে!")
-
+        bot_user = bot.get_me().username
+        bot.send_message(user_id, f"প্রতি রেফারে ১০ টাকা! তোর লিংক:\nhttps://t.me/{bot_user}?start={user_id}")
     elif message.text == "📊 স্ট্যাটিস্টিক্স":
         cursor.execute("SELECT COUNT(*) FROM users")
-        total_users = cursor.fetchone()[0]
-        bot.reply_to(message, f"মোট ইউজার: {total_users}")
-
+        total = cursor.fetchone()[0]
+        bot.send_message(user_id, f"📊 মোট ইউজার: {total} জন।")
+    elif message.text == "💳 উইথড্র":
+        if balance < 1000:
+            bot.send_message(user_id, "আগে ১০০০ পুরা করো মামা! তোমার ব্যালেন্সে পর্যাপ্ত টাকা নাই।")
+        else:
+            bot.send_message(user_id, "মামা, ১০০০ টাকা হয়ে গেছে! এখন তোমার বিকাশ বা নগদ নাম্বারটা লিখে দাও।")
+            bot.send_message(ADMIN_ID, f"🔔 উইথড্র রিকোয়েস্ট!\nআইডি: {user_id}\nব্যালেন্স: {balance}")
     conn.close()
 
-# --- রানার ---
-if __name__ == '__main__':
+if __name__ == "__main__":
     init_db()
     Thread(target=run_flask).start()
-    bot.infinity_polling()if (balance < 1000) {
-    alert("আগে 1000 পুরা করো মামা!");
-} else {
-    // Withdraw process starts
-            }
+    print("বট একদম রেডি মামা!")
+    bot.infinity_polling()
