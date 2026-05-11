@@ -4,7 +4,7 @@ from flask import Flask
 from threading import Thread
 import os
 
-# আপনার তথ্যসমূহ
+# --- কনফিগারেশন ---
 TOKEN = '8723569797:AAHn_66bEU7fBZwN2G-mUVgJUrIzsT2ZftY'
 CHANNEL_ID = '-1003351496871' 
 CHANNEL_LINK = 'https://t.me/+fWQHyEKJepA2Njll'
@@ -13,19 +13,16 @@ ADMIN_ID = 6871732560
 bot = telebot.TeleBot(TOKEN)
 app = Flask('')
 
+# --- রেন্ডার সার্ভার সচল রাখার জন্য Flask Setup ---
 @app.route('/')
 def home():
-    return "বট অনলাইনে সচল আছে!"
+    return "বট সচল আছে মামা!"
 
-def run():
-    # রেন্ডারের জন্য পোর্ট ১০০০০ ব্যবহার করা ভালো
+def run_flask():
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
 
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
-
+# --- ডাটাবেস সেটআপ ---
 def init_db():
     conn = sqlite3.connect('refer_data.db', check_same_thread=False)
     cursor = conn.cursor()
@@ -34,6 +31,7 @@ def init_db():
     conn.commit()
     conn.close()
 
+# --- মেম্বারশিপ চেক ---
 def check_join(user_id):
     try:
         member = bot.get_chat_member(CHANNEL_ID, user_id)
@@ -41,18 +39,19 @@ def check_join(user_id):
     except:
         return False
 
+# --- কিবোর্ড মেনু ---
 def main_menu():
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row("💰 ব্যালেন্স", "👥 রেফার")
     markup.row("💳 উইথড্র", "📊 স্ট্যাটিস্টিক্স")
     return markup
 
+# --- কমান্ড হ্যান্ডলার ---
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.chat.id
     init_db()
     
-    # ইনভাইটেশন লিংক চেক
     args = message.text.split()
     refer_id = args[1] if len(args) > 1 else None
 
@@ -121,7 +120,14 @@ def handle_text(message):
         else:
             bot.send_message(user_id, "উইথড্র করতে আপনার নাম্বার ও টাকার পরিমাণ এডমিনকে জানান।")
 
+# --- মেইন ফাংশন ---
 if __name__ == "__main__":
     init_db()
-    keep_alive()
+    # Flask কে আলাদা থ্রেডে চালানো যাতে সে বটকে ডিস্টার্ব না করে
+    t = Thread(target=run_flask)
+    t.daemon = True
+    t.start()
+    
+    print("বট অনলাইনে সচল হচ্ছে...")
+    # বটের মেইন পোলিং চালু
     bot.infinity_polling()
