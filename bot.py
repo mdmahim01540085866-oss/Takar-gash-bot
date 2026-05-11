@@ -1,3 +1,4 @@
+        
 import telebot
 import sqlite3
 from flask import Flask
@@ -10,7 +11,7 @@ CHANNEL_ID = '-1003351496871'
 CHANNEL_LINK = 'https://t.me/+fWQHyEKJepA2Njll'
 
 bot = telebot.TeleBot(TOKEN, threaded=False)
-app = Flask('')
+app = Flask(__name__)
 
 @app.route('/')
 def home():
@@ -28,7 +29,6 @@ def get_db():
 def init_db():
     conn = get_db()
     cursor = conn.cursor()
-    # joined কলামটা নিশ্চিত করা হচ্ছে
     cursor.execute('''CREATE TABLE IF NOT EXISTS users 
                       (user_id INTEGER PRIMARY KEY, balance INTEGER DEFAULT 0, referred_by INTEGER, joined INTEGER DEFAULT 0)''')
     conn.commit()
@@ -64,7 +64,6 @@ def start(message):
     user = cursor.fetchone()
 
     if not user:
-        # একদম নতুন ইউজার হলে ডাটাবেসে ঢোকানো হচ্ছে
         cursor.execute("INSERT INTO users (user_id, balance, referred_by, joined) VALUES (?, 0, ?, 0)", (user_id, refer_id))
         conn.commit()
     conn.close()
@@ -77,28 +76,24 @@ def start(message):
     else:
         bot.send_message(user_id, "স্বাগতম মামা! মেনু ব্যবহার করুন।", reply_markup=main_menu())
 
-# --- ভেরিফাই বাটন (আসল জাদুর জায়গা) ---
+# --- ভেরিফাই বাটন ---
 @bot.callback_query_handler(func=lambda call: call.data == "verify")
 def verify(call):
     user_id = call.from_user.id
     if is_joined(user_id):
         conn = get_db()
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT referred_by, joined FROM users WHERE user_id=?", (user_id,))
+        cursor = conn.cursor()uot;, (user_id,))
         res = cursor.fetchone()
         
-        if res and res[1] == 0:  # যদি ইউজার আগে কখনো ভেরিফাই না করে থাকে
+        if res and res[1] == 0:
             ref_id = res[0]
             if ref_id and int(ref_id) != user_id:
-                # রেফারারকে ১০ টাকা দেওয়া হচ্ছে
                 cursor.execute("UPDATE users SET balance = balance + 10 WHERE user_id=?", (ref_id,))
                 conn.commit()
                 try:
                     bot.send_message(ref_id, "মামা! আপনার রেফার লিংকে একজন নতুন মেম্বার জয়েন করেছে। ১০ টাকা বোনাস পেলেন! 🎉")
                 except: pass
             
-            # এই ইউজারের কাজ শেষ, joined = 1 করে দিলাম
             cursor.execute("UPDATE users SET joined = 1 WHERE user_id=?", (user_id,))
             conn.commit()
         
@@ -111,25 +106,13 @@ def verify(call):
 @bot.message_handler(func=lambda m: True)
 def handle_text(message):
     user_id = message.chat.id
-    if not is_joined(user_id): return start(message)
+    if not is_joined(user_id): 
+        start(message)
 
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    if message.text == "💰 ব্যালেন্স":
-        cursor.execute("SELECT balance FROM users WHERE user_id=?", (user_id,))
-        res = cursor.fetchone()
-        balance = res[0] if res else 0
-        bot.send_message(user_id, f"আপনার বর্তমান ব্যালেন্স: {balance} টাকা।")
-    
-    elif message.text == "👥 রেফার":
-        bot_user = bot.get_me().username
-        bot.send_message(user_id, f"প্রতি রেফারে ১০ টাকা!\nলিংক:\nhttps://t.me/{bot_user}?start={user_id}")
-    
-    conn.close()
-
-if __name__ == "__main__":
-    init_db()
-    Thread(target=run_flask).start()
-    print("বট সচল হচ্ছে...")
+# --- বট রান করার অংশ ---
+if __name__ == '__main__':
+    t = Thread(target=run_flask)
+    t.start()
     bot.infinity_polling()
+        
+        cursor.execute("SELECT referred_by, joined FROM users WHERE user_id=?&q
