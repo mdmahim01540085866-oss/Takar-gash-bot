@@ -57,16 +57,16 @@ def vfy(c):
         res = db_q("SELECT ref, jnd FROM users WHERE uid=?", (uid,))
         if res and res[0][1] == 0:
             rid = res[0][0]
-            # ইউজারের নিজের ব্যালেন্সে ১০ টাকা অ্যাড
+            # ইউজারের নিজের ব্যালেন্সে  ৩০ টাকা অ্যাড
             db_q("UPDATE users SET bal = bal + 10, jnd = 1 WHERE uid=?", (uid,))
-            # রেফারারের ব্যালেন্সে ১০ টাকা অ্যাড
+            # রেফারারের ব্যালেন্সে ৩০ টাকা অ্যাড
             if rid and int(rid) != uid:
-                db_q("UPDATE users SET bal = bal + 10 WHERE uid=?", (rid,))
+                db_q("UPDATE users SET bal = bal + ৩০ WHERE uid=?", (rid,))
                 try: bot.send_message(rid, "🎉 মামা! তোমার রেফার লিংকে একজন সফলভাবে জয়েন করেছে। ১০ টাকা বোনাস পেয়েছো!")
                 except: pass
             
             bot.delete_message(uid, c.message.message_id)
-            bot.send_message(uid, "✅ ভেরিফিকেশন সফল! ১০ টাকা বোনাস পেয়েছো মামা। এখন নিচে থেকে মেনু ব্যবহার করো।", reply_markup=main_m())
+            bot.send_message(uid, "✅ ভেরিফিকেশন সফল! ৩৫ টাকা বোনাস পেয়েছো মামা। এখন নিচে থেকে মেনু ব্যবহার করো।", reply_markup=main_m())
         else:
             bot.answer_callback_query(c.id, "মামা, তুমি তো অলরেডি বোনাস নিয়েছো!", show_alert=True)
     else:
