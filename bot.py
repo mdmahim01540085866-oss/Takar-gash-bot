@@ -1,9 +1,12 @@
-# -*- coding: utf-8 -*-
-import telebot, sqlite3, os
+#-*- coding: utf-8 -*-
+import telebot
+import sqlite3
+import time
+import os
 from flask import Flask
 from threading import Thread
 
-# --- তোর নতুন কনফিগারেশন ---
+# --- কনফিগারেশন ---
 TOKEN = '8723569797:AAHn_66bEU7fBZwN2G-mUVgJUrIzsT2ZftY'
 CH_ID = -1003842595357
 CH_LINK = 'https://t.me/Bezznxt'
@@ -11,82 +14,184 @@ ADMIN = 6871732560
 
 bot = telebot.TeleBot(TOKEN, threaded=False)
 app = Flask('')
+
 @app.route('/')
-def home(): return "Bot Running"
+def home():
+    return "Bot is Running!"
 
-def db_q(sql, p=()):
+def run():
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
+
+def get_db():
+    conn = sqlite3.connect('refer_data.db', timeout=20)
+    return conn
+
+def init_db():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS users 
+                    (user_id INTEGER PRIMARY KEY, balance INTEGER DEFAULT 0, 
+                     referred_by INTEGER, joined_status INTEGER DEFAULT 0,
+                     total_ref INTEGER DEFAULT 0, task_state INTEGER DEFAULT 0)''')
+    conn.commit()
+    conn.close()
+
+def is_joined(user_id):
     try:
-        with sqlite3.connect('refer_data.db', timeout=20) as conn:
-            cur = conn.cursor()
-            cur.execute(sql, p); conn.commit()
-            return cur.fetchall()
-    except: return []
+        member = bot.get_chat_member(CH_ID, user_id)
+        if member.status in ['member', 'administrator', 'creator']:
+            return True
+        return False
+    except:
+        return False
 
-def is_j(uid):
-    try: 
-        status = bot.get_chat_member(CH_ID, uid).status
-        return status in ['member', 'administrator', 'creator']
-    except: return False
-
-def main_m():
-    kb = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.row("💰 ব্যালেন্স", "🎁 রেফার")
-    kb.row("📝 টাস্ক", "💸 উইথড্র")
-    kb.row("📊 স্ট্যাটিস্টিকস"); return kb
+def main_menu():
+    keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.row("💰 ব্যালেন্স", "🎁 রেফার")
+    keyboard.row("📝 টাস্ক", "💸 উইথড্র")
+    keyboard.row("📊 স্ট্যাটিস্টিকস")
+    return keyboard
 
 @bot.message_handler(commands=['start'])
-def start(m):
-    uid = m.chat.id
-    db_q('''CREATE TABLE IF NOT EXISTS users 
-            (uid INTEGER PRIMARY KEY, bal INTEGER DEFAULT 0, ref INTEGER, 
-             jnd INTEGER DEFAULT 0, r_cnt INTEGER DEFAULT 0, m_state INTEGER DEFAULT 0)''')
+def start(message):
+    user_id = message.chat.id
+    init_db()
     
-    args = m.text.split()
-    rid = args[1] if len(args) > 1 else None
+    command_args = message.text.split()
+    referrer = command_args[1] if len(command_args) > 1 else None
     
-    if not db_q("SELECT uid FROM users WHERE uid=?", (uid,)):
-        db_q("INSERT INTO users (uid, bal, ref, jnd, r_cnt, m_state) VALUES (?, 0, ?, 0, 0, 0)", (uid, rid))
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id FROM users WHERE user_id=?", (user_id,))
+    user = cursor.fetchone()
     
-    if not is_j(uid):
-        kb = telebot.types.InlineKeyboardMarkup()
-        kb.add(telebot.types.InlineKeyboardButton("চ্যানেলে জয়েন করুন 📢", url=CH_LINK))
-        kb.add(telebot.types.InlineKeyboardButton("ভেরিফাই করুন ✅", callback_data="vfy"))
-        bot.send_message(uid, "স্বাগতম মামা! ১০ টাকা বোনাস পেতে আগে চ্যানেলে জয়েন করো, তারপর ভেরিফাই করো।", reply_markup=kb)
+    if not user:
+        cursor.execute("INSERT INTO users (user_id, balance, referred_by, joined_status, total_ref, task_state) VALUES (?, 0, ?, 0, 0, 0)", 
+                       (user_id, referrer))
+        conn.commit()
+    conn.close()
+    
+    if not is_joined(user_id):
+        markup = telebot.types.InlineKeyboardMarkup()
+        join_btn = telebot.types.InlineKeyboardButton("চ্যানেলে জয়েন করুন 📢", url=CH_LINK)
+        verify_btn = telebot.types.InlineKeyboardButton("ভেরিফাই করুন ✅", callback_data="verify_join")
+        markup.add(join_btn)
+        markup.add(verify_btn)
+        bot.send_message(user_id, "স্বাগতম মামা! ১০ টাকা বোনাস পেতে আগে আমাদের চ্যানেলে জয়েন করো, তারপর ভেরিফাই বাটনে ক্লিক করো।", reply_markup=markup)
     else:
-        bot.send_message(uid, "মামা, তোমার একাউন্ট আনলক আছে!", reply_markup=main_m())
+        bot.send_message(user_id, "মামা, তোমার একাউন্ট অলরেডি ভেরিফাইড আছে!", reply_markup=main_menu())
 
-@bot.callback_query_handler(func=lambda c: c.data == "vfy")
-def vfy(c):
-    uid = c.from_user.id
-    if is_j(uid):
-        res = db_q("SELECT ref, jnd FROM users WHERE uid=?", (uid,))
-        if res and res[0][1] == 0:
-            rid = res[0][0]
-            db_q("UPDATE users SET bal = bal + 10, jnd = 1 WHERE uid=?", (uid,))
-            if rid and int(rid) != uid:
-                db_q("UPDATE users SET bal = bal + 10, r_cnt = r_cnt + 1 WHERE uid=?", (rid,))
-                try: bot.send_message(rid, "🎉 মামা! তোমার রেফারে একজন জয়েন করেছে। ১০ টাকা বোনাস পেয়েছো!")
-                except: pass
-            bot.delete_message(uid, c.message.message_id)
-            bot.send_message(uid, "✅ ভেরিফিকেশন সফল! ১০ টাকা বোনাস পেয়েছো।", reply_markup=main_m())
+@bot.callback_query_handler(func=lambda call: call.data == "verify_join")
+def verify_callback(call):
+    user_id = call.from_user.id
+    if is_joined(user_id):
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT referred_by, joined_status FROM users WHERE user_id=?", (user_id,))
+        res = cursor.fetchone()
+        
+        if res and res[1] == 0:
+            referrer_id = res[0]
+            # ইউজারের ১০ টাকা বোনাস
+            cursor.execute("UPDATE users SET balance = balance + 10, joined_status = 1 WHERE user_id=?", (user_id,))
+            
+            # রেফারারের ১০ টাকা বোনাস ও কাউন্ট আপডেট
+            if referrer_id and int(referrer_id) != user_id:
+                cursor.execute("UPDATE users SET balance = balance + 10, total_ref = total_ref + 1 WHERE user_id=?", (referrer_id,))
+                try:
+                    bot.send_message(referrer_id, "🎉 মামা! তোমার রেফার লিংকে একজন সফলভাবে জয়েন করেছে। ১০ টাকা বোনাস পেয়েছো!")
+                except:
+                    pass
+            
+            conn.commit()
+            bot.delete_message(user_id, call.message.message_id)
+            bot.send_message(user_id, "✅ ভেরিফিকেশন সফল! ১০ টাকা বোনাস তোমার ব্যালেন্সে যোগ হয়েছে মামা।", reply_markup=main_menu())
+        else:
+            bot.answer_callback_query(call.id, "মামা, তুমি তো অলরেডি বোনাস নিয়েছো!", show_alert=True)
+        conn.close()
     else:
-        bot.answer_callback_query(c.id, "আগে চ্যানেলে জয়েন করো মামা!", show_alert=True)
+        bot.answer_callback_query(call.id, "মামা, আগে তো চ্যানেলে জয়েন করতে হবে!", show_alert=True)
 
 @bot.message_handler(func=lambda message: True)
-def handle_messages(message):
-    uid = message.chat.id
-    if not is_j(uid): return start(message)
+def handle_all_messages(message):
+    user_id = message.chat.id
+    if not is_joined(user_id):
+        return start(message)
 
-    res = db_q("SELECT bal, r_cnt, m_state FROM users WHERE uid=?", (uid,))
-    if not res: return start(message)
-    bal, r_cnt, m_state = res[0]
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT balance, total_ref, task_state FROM users WHERE user_id=?", (user_id,))
+    data = cursor.fetchone()
+    conn.close()
+
+    if not data:
+        return start(message)
+
+    balance, total_ref, task_state = data
 
     if message.text == "💰 ব্যালেন্স":
-        bot.send_message(uid, f"আপনার বর্তমান ব্যালেন্স: `{bal} টাকা` \nমোট রেফার: `{r_cnt}` জন", parse_mode="Markdown")
+        bot.send_message(user_id, f"আপনার বর্তমান ব্যালেন্স: `{balance} টাকা` \nমোট রেফার: `{total_ref}` জন", parse_mode="Markdown")
+
     elif message.text == "🎁 রেফার":
-        bot_user = bot.get_me().username
-        bot.send_message(uid, f"প্রতি রেফার ১০ টাকা! \nলিংক: `https://t.me/{bot_user}?start={uid}`", parse_mode="Markdown")
+        bot_username = bot.get_me().username
+        ref_link = f"https://t.me/{bot_username}?start={user_id}"
+        bot.send_message(user_id, f"প্রতি রেফার এ পান ১০ টাকা!\nআপনার রেফার লিংক:\n`{ref_link}`", parse_mode="Markdown")
+
     elif message.text == "📝 টাস্ক":
-        msg = f"🎯 **রেফার মাইলস্টোন টাস্ক**\n\n১০ রেফার: ১২০ টাকা বোনাস {'✅' if m_state >= 1 else '❌'}\n২০ রেফার: ২৫০ টাকা বোনাস {'✅' if m_state >= 2 else '❌'}\n৪০ রেফার: ৫০০ টাকা বোনাস {'✅' if m_state >= 3 else '❌'}\n\nআপনার মোট রেফার: `{r_cnt}` জন।"
+        task_msg = f"🎯 **রেফার মাইলস্টোন টাস্ক**\n\n"
+        task_msg += f"১. ১০ রেফার: ১২০ টাকা বোনাস {'✅' if task_state >= 1 else '❌'}\n"
+        task_msg += f"২. ২০ রেফার: ২৫০ টাকা বোনাস {'✅' if task_state >= 2 else '❌'}\n"
+        task_msg += f"৩. ৪০ রেফার: ৫০০ টাকা বোনাস {'✅' if task_state >= 3 else '❌'}\n\n"
+        task_msg += f"মোট রেফার: `{total_ref}` জন।"
+        
         kb = telebot.types.InlineKeyboardMarkup()
-        if r_cnt
+        if total_ref >= 10 and task_state == 0:
+            kb.add(telebot.types.InlineKeyboardButton("১০ রেফার বোনাস (১২০ টাকা) ক্লেইম করুন 🎁", callback_data="get_1"))
+        if total_ref >= 20 and task_state == 1:
+            kb.add(telebot.types.InlineKeyboardButton("২০ রেফার বোনাস (২৫০ টাকা) ক্লেইম করুন 🎁", callback_data="get_2"))
+        if total_ref >= 40 and task_state == 2:
+            kb.add(telebot.types.InlineKeyboardButton("৪০ রেফার বোনাস (৫০০ টাকা) ক্লেইম করুন 🎁", callback_data="get_3"))
+        
+        bot.send_message(user_id, task_msg, reply_markup=kb, parse_mode="Markdown")
+
+    elif message.text == "💸 উইথড্র":
+        if balance < 1000:
+            bot.send_message(user_id, f"❌ আগে ১০০০ টাকা পুরা করো মামা! আপনার আছে {balance} টাকা।")
+        else:
+            bot.send_message(user_id, "✅ আপনার উইথড্র রিকোয়েস্টটি প্রসেসিংয়ে আছে। অ্যাডমিন শীঘ্রই যোগাযোগ করবে।")
+
+    elif message.text == "📊 স্ট্যাটিস্টিকস":
+        bot.send_message(user_id, "📊 এই ফিচারে কাজ চলছে...")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('get_'))
+def get_bonus(call):
+    user_id = call.from_user.id
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT total_ref, task_state FROM users WHERE user_id=?", (user_id,))
+    res = cursor.fetchone()
+    
+    ref_cnt, state = res
+    bonus = 0
+    new_state = state
+    
+    if call.data == "get_1" and ref_cnt >= 10 and state == 0:
+        bonus, new_state = 120, 1
+    elif call.data == "get_2" and ref_cnt >= 20 and state == 1:
+        bonus, new_state = 250, 2
+    elif call.data == "get_3" and ref_cnt >= 40 and state == 2:
+        bonus, new_state = 500, 3
+        
+    if bonus > 0:
+        cursor.execute("UPDATE users SET balance = balance + ?, task_state = ? WHERE user_id=?", (bonus, new_state, user_id))
+        conn.commit()
+        bot.answer_callback_query(call.id, f"অভিনন্দন! {bonus} টাকা বোনাস পেয়েছো মামা।", show_alert=True)
+        bot.edit_message_text(f"✅ আপনি সফলভাবে {bonus} টাকা মাইলস্টোন বোনাস নিয়েছেন!", user_id, call.message.message_id)
+    else:
+        bot.answer_callback_query(call.id, "মামা, তুমি এই বোনাস নেওয়ার যোগ্য নও!", show_alert=True)
+    conn.close()
+
+if __name__ == "__main__":
+    init_db()
+    Thread(target=run).start()
+    bot.infinity_polling()
