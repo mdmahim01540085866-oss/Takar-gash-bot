@@ -3,7 +3,7 @@ import telebot, sqlite3, os
 from flask import Flask
 from threading import Thread
 
-# --- কনফিগারেশন (তোর নতুন চ্যানেল ডিটেইলস) ---
+# --- তোর নতুন কনফিগারেশন ---
 TOKEN = '8723569797:AAHn_66bEU7fBZwN2G-mUVgJUrIzsT2ZftY'
 CH_ID = -1003842595357
 CH_LINK = 'https://t.me/Bezznxt'
@@ -15,13 +15,17 @@ app = Flask('')
 def home(): return "Bot Running"
 
 def db_q(sql, p=()):
-    with sqlite3.connect('refer_data.db', timeout=20) as conn:
-        cur = conn.cursor()
-        cur.execute(sql, p); conn.commit()
-        return cur.fetchall()
+    try:
+        with sqlite3.connect('refer_data.db', timeout=20) as conn:
+            cur = conn.cursor()
+            cur.execute(sql, p); conn.commit()
+            return cur.fetchall()
+    except: return []
 
 def is_j(uid):
-    try: return bot.get_chat_member(CH_ID, uid).status in ['member', 'administrator', 'creator']
+    try: 
+        status = bot.get_chat_member(CH_ID, uid).status
+        return status in ['member', 'administrator', 'creator']
     except: return False
 
 def main_m():
@@ -79,36 +83,10 @@ def handle_messages(message):
 
     if message.text == "💰 ব্যালেন্স":
         bot.send_message(uid, f"আপনার বর্তমান ব্যালেন্স: `{bal} টাকা` \nমোট রেফার: `{r_cnt}` জন", parse_mode="Markdown")
-
     elif message.text == "🎁 রেফার":
-        ref_link = f"https://t.me/{(bot.get_me().username)}?start={uid}"
-        bot.send_message(uid, f"প্রতি রেফার ১০ টাকা! \nলিংক: `{ref_link}`", parse_mode="Markdown")
-
+        bot_user = bot.get_me().username
+        bot.send_message(uid, f"প্রতি রেফার ১০ টাকা! \nলিংক: `https://t.me/{bot_user}?start={uid}`", parse_mode="Markdown")
     elif message.text == "📝 টাস্ক":
-        msg = f"🎯 **রেফার মাইলস্টোন টাস্ক**\n\n"
-        msg += f"১. ১০ রেফার: ১২০ টাকা বোনাস {'✅' if m_state >= 1 else '❌'}\n"
-        msg += f"২. ২০ রেফার: ২৫০ টাকা বোনাস {'✅' if m_state >= 2 else '❌'}\n"
-        msg += f"৩. ৪০ রেফার: ৫০০ টাকা বোনাস {'✅' if m_state >= 3 else '❌'}\n\n"
-        msg += f"আপনার মোট রেফার: `{r_cnt}` জন।\n"
-        
+        msg = f"🎯 **রেফার মাইলস্টোন টাস্ক**\n\n১০ রেফার: ১২০ টাকা বোনাস {'✅' if m_state >= 1 else '❌'}\n২০ রেফার: ২৫০ টাকা বোনাস {'✅' if m_state >= 2 else '❌'}\n৪০ রেফার: ৫০০ টাকা বোনাস {'✅' if m_state >= 3 else '❌'}\n\nআপনার মোট রেফার: `{r_cnt}` জন।"
         kb = telebot.types.InlineKeyboardMarkup()
-        if r_cnt >= 10 and m_state == 0:
-            kb.add(telebot.types.InlineKeyboardButton("১০ রেফার বোনাস নিন 🎁", callback_data="claim_1"))
-        if r_cnt >= 20 and m_state == 1:
-            kb.add(telebot.types.InlineKeyboardButton("২০ রেফার বোনাস নিন 🎁", callback_data="claim_2"))
-        if r_cnt >= 40 and m_state == 2:
-            kb.add(telebot.types.InlineKeyboardButton("৪০ রেফার বোনাস নিন 🎁", callback_data="claim_3"))
-        
-        bot.send_message(uid, msg, reply_markup=kb, parse_mode="Markdown")
-
-    elif message.text == "💸 উইথড্র":
-        if bal < 1000: bot.send_message(uid, "❌ আগে 1000 টাকা পুরা করো মামা!")
-        else: bot.send_message(uid, "✅ আপনার উইথড্র রিকোয়েস্টটি প্রসেসিংয়ে আছে।")
-
-    elif message.text == "📊 স্ট্যাটিস্টিকস":
-        bot.send_message(uid, "📊 শীঘ্রই আসছে...")
-
-@bot.callback_query_handler(func=lambda c: c.data.startswith('claim_'))
-def claim_bonus(c):
-    uid = c.from_user.id
-    res
+        if r_cnt
