@@ -3,10 +3,10 @@ import telebot, sqlite3, os
 from flask import Flask
 from threading import Thread
 
-# --- কনফিগারেশন ---
+# --- কনফিগারেশন (তোর নতুন চ্যানেল ডিটেইলস) ---
 TOKEN = '8723569797:AAHn_66bEU7fBZwN2G-mUVgJUrIzsT2ZftY'
-CH_ID = -1003351496871
-CH_LINK = 'https://t.me/+fWQHyEKJepA2Njll'
+CH_ID = -1003842595357
+CH_LINK = 'https://t.me/Bezznxt'
 ADMIN = 6871732560
 
 bot = telebot.TeleBot(TOKEN, threaded=False)
@@ -58,15 +58,13 @@ def vfy(c):
         res = db_q("SELECT ref, jnd FROM users WHERE uid=?", (uid,))
         if res and res[0][1] == 0:
             rid = res[0][0]
-            # নতুন ইউজারের ১০ টাকা বোনাস
             db_q("UPDATE users SET bal = bal + 10, jnd = 1 WHERE uid=?", (uid,))
-            # রেফারারের ১০ টাকা ইনকাম এবং কাউন্ট বাড়ানো
             if rid and int(rid) != uid:
                 db_q("UPDATE users SET bal = bal + 10, r_cnt = r_cnt + 1 WHERE uid=?", (rid,))
                 try: bot.send_message(rid, "🎉 মামা! তোমার রেফারে একজন জয়েন করেছে। ১০ টাকা বোনাস পেয়েছো!")
                 except: pass
             bot.delete_message(uid, c.message.message_id)
-            bot.send_message(uid, "✅ ভেরিফিকেশন সফল! ১০ টাকা বোনাস পেয়েছো মামা।", reply_markup=main_m())
+            bot.send_message(uid, "✅ ভেরিফিকেশন সফল! ১০ টাকা বোনাস পেয়েছো।", reply_markup=main_m())
     else:
         bot.answer_callback_query(c.id, "আগে চ্যানেলে জয়েন করো মামা!", show_alert=True)
 
@@ -95,17 +93,17 @@ def handle_messages(message):
         
         kb = telebot.types.InlineKeyboardMarkup()
         if r_cnt >= 10 and m_state == 0:
-            kb.add(telebot.types.InlineKeyboardButton("১০ রেফার বোনাস (১২০ টাকা) নিন 🎁", callback_data="claim_1"))
+            kb.add(telebot.types.InlineKeyboardButton("১০ রেফার বোনাস নিন 🎁", callback_data="claim_1"))
         if r_cnt >= 20 and m_state == 1:
-            kb.add(telebot.types.InlineKeyboardButton("২০ রেফার বোনাস (২৫০ টাকা) নিন 🎁", callback_data="claim_2"))
+            kb.add(telebot.types.InlineKeyboardButton("২০ রেফার বোনাস নিন 🎁", callback_data="claim_2"))
         if r_cnt >= 40 and m_state == 2:
-            kb.add(telebot.types.InlineKeyboardButton("৪০ রেফার বোনাস (৫০০ টাকা) নিন 🎁", callback_data="claim_3"))
+            kb.add(telebot.types.InlineKeyboardButton("৪০ রেফার বোনাস নিন 🎁", callback_data="claim_3"))
         
         bot.send_message(uid, msg, reply_markup=kb, parse_mode="Markdown")
 
     elif message.text == "💸 উইথড্র":
         if bal < 1000: bot.send_message(uid, "❌ আগে 1000 টাকা পুরা করো মামা!")
-        else: bot.send_message(uid, "✅ উইথড্র রিকোয়েস্ট অ্যাডমিনের কাছে পাঠানো হয়েছে।")
+        else: bot.send_message(uid, "✅ আপনার উইথড্র রিকোয়েস্টটি প্রসেসিংয়ে আছে।")
 
     elif message.text == "📊 স্ট্যাটিস্টিকস":
         bot.send_message(uid, "📊 শীঘ্রই আসছে...")
@@ -113,24 +111,4 @@ def handle_messages(message):
 @bot.callback_query_handler(func=lambda c: c.data.startswith('claim_'))
 def claim_bonus(c):
     uid = c.from_user.id
-    res = db_q("SELECT r_cnt, m_state FROM users WHERE uid=?", (uid,))
-    r_cnt, m_state = res[0]
-    bonus, new_state = 0, m_state
-    
-    if c.data == "claim_1" and r_cnt >= 10 and m_state == 0:
-        bonus, new_state = 120, 1
-    elif c.data == "claim_2" and r_cnt >= 20 and m_state == 1:
-        bonus, new_state = 250, 2
-    elif c.data == "claim_3" and r_cnt >= 40 and m_state == 2:
-        bonus, new_state = 500, 3
-        
-    if bonus > 0:
-        db_q("UPDATE users SET bal = bal + ?, m_state = ? WHERE uid=?", (bonus, new_state, uid))
-        bot.answer_callback_query(c.id, f"অভিনন্দন! {bonus} টাকা এক্সট্রা বোনাস পেয়েছেন।", show_alert=True)
-        bot.edit_message_text(f"✅ আপনি সফলভাবে {bonus} টাকা মাইলস্টোন বোনাস ক্লেইম করেছেন!", uid, c.message.message_id)
-    else:
-        bot.answer_callback_query(c.id, "মামা, অলরেডি নিয়েছেন বা রেফার পূরণ হয়নি!", show_alert=True)
-
-if __name__ == "__main__":
-    Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))).start()
-    bot.infinity_polling()
+    res
