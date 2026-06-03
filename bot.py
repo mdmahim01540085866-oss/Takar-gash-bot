@@ -5,7 +5,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 # --- সেটিংস ---
 TOKEN = "8723569797:AAHn_66bEU7fBZwN2G-mUVgJUrIzsT2ZftY" 
 YT_LINK = "https://www.youtube.com/@nexusopti"  # তোর ইউটিউব চ্যানেল লিঙ্ক এখানে সেট করে দিয়েছি
-MIN_WITHDRAW = 1000
+MIN_WITHDRAW = 500
 REFER_BONUS = 10
 
 # ইউজার ডাটা স্টোর করার ডিকশনারি
